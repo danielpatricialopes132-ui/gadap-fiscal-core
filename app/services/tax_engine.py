@@ -94,6 +94,11 @@ class TaxEngineSimplesNacional:
     """Motor de cálculo fiscal para emitentes no Simples Nacional."""
 
     @classmethod
+    def calculate_document(cls, doc: DocumentoFiscalInput) -> DocumentoProcessado:
+        """Alias para o método process."""
+        return cls.process(doc)
+
+    @classmethod
     def process(cls, doc: DocumentoFiscalInput) -> DocumentoProcessado:
         """Executa a validação, cálculo dos itens e apuração dos totais do documento."""
         if doc.emitente.crt != "1":

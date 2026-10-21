@@ -2,15 +2,20 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.api.routes import router as dfe_router
+from app.api.v1.endpoints.fiscal import router as fiscal_v1_router
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Motor de Emissão de Documentos Fiscais Eletrônicos (NF-e, NFC-e e NFS-e) no Simples Nacional",
+    description="Motor de Emissão e Gestão de Documentos Fiscais Eletrônicos (NF-e mod 55, NFC-e mod 65 e NFS-e ADN) para o Simples Nacional",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
-# Inclusão dos endpoints operacionais DF-e
+# Inclusão dos endpoints operacionais DF-e e v1
 app.include_router(dfe_router)
+app.include_router(fiscal_v1_router)
 
 
 @app.get("/")

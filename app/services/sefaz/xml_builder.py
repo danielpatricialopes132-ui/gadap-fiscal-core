@@ -14,7 +14,7 @@ from typing import Optional
 from lxml import etree
 
 from app.schemas.canonical import TipoDocumento
-from app.services.tax_engine import DocumentoProcessado
+from app.services.tax_engine import DocumentoProcessado, TaxEngineSimplesNacional
 from app.services.sefaz.access_key import build_access_key
 from app.core.uf_matrix import get_cuf_by_uf, get_nfce_qr_code_url
 from app.core.config import settings, DFEEnvironment
@@ -67,6 +67,14 @@ class NFeXmlBuilder:
             tp_emis="1",  # 1=Normal
             c_nf=c_nf,
         )
+
+    @classmethod
+    def build_from_input(cls, doc_input, data_emissao: Optional[datetime] = None) -> tuple[str, str]:
+        """Constrói o XML da NF-e/NFC-e diretamente a partir de um DocumentoFiscalInput."""
+        doc_proc = TaxEngineSimplesNacional.calculate_document(doc_input)
+        builder = cls(doc_proc=doc_proc, data_emissao=data_emissao)
+        xml_bytes = builder.to_xml_bytes()
+        return xml_bytes.decode("utf-8"), builder.chave_acesso
 
     def _validate_cfop_dest_destination(self) -> None:
         """Valida se os CFOPs dos itens são coerentes com o destino da operação (Cenário A)."""
