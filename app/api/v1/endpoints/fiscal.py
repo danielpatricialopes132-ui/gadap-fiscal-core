@@ -259,16 +259,37 @@ def emitir_documento_fiscal(payload: DocumentoFiscalInput) -> EmissaoFiscalRespo
         protocolo = "135240000000001"
 
     # 4. Geração do DANFE em PDF com Marca d'água automática se homologação
+    danfe_pdf_bytes = None
     try:
         danfe_pdf_bytes = DanfePdfGenerator.generate_danfe_pdf(
             xml_input=xml_final,
             force_homologacao=not settings.is_production,
         )
         danfe_b64 = base64.b64encode(danfe_pdf_bytes).decode("utf-8")
-    except Exception as e:
+    except Exception:
         danfe_b64 = None
 
     xml_b64 = base64.b64encode(xml_final.encode("utf-8")).decode("utf-8")
+
+    # 5. Persistência e Storage local / Supabase
+    try:
+        from app.services.storage import FiscalStorageService
+        storage_svc = FiscalStorageService()
+        tot_liquido = sum(float(it.valor_total_liquido) for it in payload.itens)
+        storage_svc.registrar_documento(
+            tipo_documento=tipo.value,
+            chave_acesso=chave_acesso,
+            numero=payload.numero,
+            serie=payload.serie,
+            emitente_cnpj=payload.emitente.cnpj,
+            destinatario_doc=payload.destinatario.cpf_cnpj if payload.destinatario else None,
+            valor_total=tot_liquido,
+            status="AUTORIZADA",
+            xml_conteudo=xml_final,
+            pdf_bytes=danfe_pdf_bytes,
+        )
+    except Exception:
+        pass
 
     return EmissaoFiscalResponse(
         sucesso=True,
@@ -284,3 +305,156 @@ def emitir_documento_fiscal(payload: DocumentoFiscalInput) -> EmissaoFiscalRespo
         danfe_pdf_b64=danfe_b64,
         ambiente=settings.DFE_ENVIRONMENT.value,
     )
+
+
+# ------------------------------------------------------------------------------
+# Inutilização de Faixa Numérica (NFeInutilizacao4)
+# ------------------------------------------------------------------------------
+class InutilizacaoRequest(BaseModel):
+    uf: str = Field(..., min_length=2, max_length=2, description="Sigla da UF")
+    ano: int = Field(..., ge=2000, le=2100, description="Ano com 4 dígitos")
+    cnpj: str = Field(..., min_length=14, max_length=14, description="CNPJ do emitente (apenas números)")
+    modelo: Literal["55", "65"] = Field(default="55", description="55 (NF-e) ou 65 (NFC-e)")
+    serie: int = Field(..., ge=1, le=999, description="Série da numeração")
+    numero_inicial: int = Field(..., ge=1, le=999999999)
+    numero_final: int = Field(..., ge=1, le=999999999)
+    justificativa: str = Field(..., min_length=15, max_length=255, description="Mínimo 15 caracteres")
+
+
+class InutilizacaoResponse(BaseModel):
+    sucesso: bool
+    c_stat: int
+    x_motivo: str
+    protocolo: Optional[str] = None
+    xml_proc_inut_b64: Optional[str] = None
+
+
+@router.post(
+    "/inutilizar",
+    response_model=InutilizacaoResponse,
+    summary="Inutilização de Numeração (NFeInutilizacao4)",
+    description="Inutiliza faixas numéricas de NF-e e NFC-e que não foram utilizadas por quebra de sequência ou erro.",
+)
+def inutilizar_numeracao(req: InutilizacaoRequest) -> InutilizacaoResponse:
+    from app.services.sefaz.inutilizacao import SefazInutilizacaoService
+    from app.services.sefaz.mtls_client import SefazMtlsClient
+
+    cert_bytes = settings.get_certificate_bytes()
+    mtls_client = None
+    signer = None
+    if cert_bytes and settings.CERTIFICATE_PASSWORD:
+        cert_mgr = A1CertificateManager(pfx_data=cert_bytes, password=settings.CERTIFICATE_PASSWORD)
+        signer = XmlSigner(private_key=cert_mgr.private_key, x509_cert_der=cert_mgr.certificate_der)
+        mtls_client = SefazMtlsClient(cert_bytes=cert_bytes, cert_password=settings.CERTIFICATE_PASSWORD)
+
+    service = SefazInutilizacaoService(mtls_client=mtls_client, signer=signer)
+    res = service.inutilizar_faixa(
+        uf=req.uf.upper(),
+        ano=req.ano,
+        cnpj=req.cnpj,
+        modelo=req.modelo,
+        serie=req.serie,
+        n_nf_ini=req.numero_inicial,
+        n_nf_fin=req.numero_final,
+        justificativa=req.justificativa,
+    )
+    b64_proc = base64.b64encode(res.xml_proc_inut.encode("utf-8")).decode("utf-8") if res.xml_proc_inut else None
+    return InutilizacaoResponse(
+        sucesso=res.is_homologado,
+        c_stat=res.c_stat,
+        x_motivo=res.x_motivo,
+        protocolo=res.n_prot,
+        xml_proc_inut_b64=b64_proc,
+    )
+
+
+# ------------------------------------------------------------------------------
+# Distribuição DF-e e Manifestação do Destinatário (NFeDistribuicaoDFe)
+# ------------------------------------------------------------------------------
+class DistribuicaoConsultaResponse(BaseModel):
+    c_stat: int
+    x_motivo: str
+    ult_nsu: str
+    max_nsu: str
+    quantidade_documentos: int
+    documentos: list
+
+
+class ManifestacaoRequest(BaseModel):
+    chave_acesso: str = Field(..., min_length=44, max_length=44, description="Chave de 44 dígitos da NF-e")
+    cnpj_destinatario: str = Field(..., min_length=14, max_length=14, description="CNPJ do destinatário")
+    tipo_evento: Literal["210200", "210210", "210220", "210240"] = Field(
+        default="210210",
+        description="210200=Confirmação, 210210=Ciência da Emissão, 210220=Desconhecimento, 210240=Não Realizada",
+    )
+    justificativa: Optional[str] = Field(None, max_length=255, description="Obrigatória para operação não realizada")
+
+
+@router.get(
+    "/distribuicao/consultar",
+    response_model=DistribuicaoConsultaResponse,
+    summary="Consulta de Documentos Emitidos contra o CNPJ (NFeDistribuicaoDFe)",
+    description="Consulta o Ambiente Nacional para baixar resumos e XMLs completos das notas emitidas contra o CNPJ da empresa.",
+)
+def consultar_distribuicao_dfe(
+    cnpj: str = Query(..., description="CNPJ do destinatário (14 dígitos)"),
+    ult_nsu: str = Query("0", description="Último NSU processado pelo ERP"),
+    ch_nfe: Optional[str] = Query(None, description="Chave de acesso específica (opcional)"),
+) -> DistribuicaoConsultaResponse:
+    from app.services.sefaz.distribuicao import SefazDistribuicaoDFeService
+    from app.services.sefaz.mtls_client import SefazMtlsClient
+
+    cert_bytes = settings.get_certificate_bytes()
+    mtls_client = None
+    if cert_bytes and settings.CERTIFICATE_PASSWORD:
+        mtls_client = SefazMtlsClient(cert_bytes=cert_bytes, cert_password=settings.CERTIFICATE_PASSWORD)
+
+    service = SefazDistribuicaoDFeService(mtls_client=mtls_client)
+    res = service.consultar_dfe(cnpj=cnpj, ult_nsu=ult_nsu, ch_nfe=ch_nfe)
+
+    docs_formatados = [
+        {
+            "nsu": d.nsu,
+            "schema": d.schema,
+            "chave_acesso": d.chave_acesso,
+            "resumo": d.resumo,
+            "xml_b64": base64.b64encode(d.xml_conteudo.encode("utf-8")).decode("utf-8"),
+        }
+        for d in res.documentos
+    ]
+
+    return DistribuicaoConsultaResponse(
+        c_stat=res.c_stat,
+        x_motivo=res.x_motivo,
+        ult_nsu=res.ult_nsu,
+        max_nsu=res.max_nsu,
+        quantidade_documentos=len(docs_formatados),
+        documentos=docs_formatados,
+    )
+
+
+@router.post(
+    "/distribuicao/manifestar",
+    summary="Manifestação do Destinatário (Ciência, Confirmação, etc.)",
+    description="Envia eventos de Ciência da Emissão ou Confirmação para liberar o download do XML completo do fornecedor.",
+)
+def manifestar_destinatario_endpoint(req: ManifestacaoRequest):
+    from app.services.sefaz.distribuicao import SefazDistribuicaoDFeService
+    from app.services.sefaz.mtls_client import SefazMtlsClient
+
+    cert_bytes = settings.get_certificate_bytes()
+    mtls_client = None
+    signer = None
+    if cert_bytes and settings.CERTIFICATE_PASSWORD:
+        cert_mgr = A1CertificateManager(pfx_data=cert_bytes, password=settings.CERTIFICATE_PASSWORD)
+        signer = XmlSigner(private_key=cert_mgr.private_key, x509_cert_der=cert_mgr.certificate_der)
+        mtls_client = SefazMtlsClient(cert_bytes=cert_bytes, cert_password=settings.CERTIFICATE_PASSWORD)
+
+    service = SefazDistribuicaoDFeService(mtls_client=mtls_client, signer=signer)
+    return service.manifestar_destinatario(
+        chave_acesso=req.chave_acesso,
+        cnpj_destinatario=req.cnpj_destinatario,
+        tipo_evento=req.tipo_evento,
+        justificativa=req.justificativa,
+    )
+

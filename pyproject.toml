@@ -28,7 +28,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["app*", "api*"]
+[tool.setuptools]
+packages = ["app", "api"]
+
 
