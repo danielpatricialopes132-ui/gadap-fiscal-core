@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dfe-engine"
+version = "0.1.0"
+description = "Motor de Emissão DF-e (NF-e 55, NFC-e 65, NFS-e) no Simples Nacional"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "lxml>=5.3.0",
+    "cryptography>=43.0.0",
+    "requests>=2.32.0",
+    "reportlab>=4.2.0",
+    "qrcode[pil]>=8.0",
+    "pillow>=10.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+]
