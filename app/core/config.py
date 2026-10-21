@@ -1,10 +1,11 @@
-"""Módulo de configuração global do Motor DF-e.
+"""Módulo de configuração global do GADAP Fiscal Core.
 
 Suporta leitura via variáveis de ambiente (.env) usando pydantic-settings.
 """
 
 from enum import Enum
 from typing import Literal, Optional
+import base64
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -51,7 +52,7 @@ class Settings(BaseSettings):
     )
 
     # Identificação da Aplicação
-    APP_NAME: str = "DF-e Engine"
+    APP_NAME: str = "GADAP Fiscal Core"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
 
@@ -113,6 +114,15 @@ class Settings(BaseSettings):
         """Obtém o token do CSC correspondente ao ambiente ativo."""
         return self.CSC_PRODUCAO_TOKEN if self.is_production else self.CSC_HOMOLOGACAO_TOKEN
 
+    def get_certificate_bytes(self) -> Optional[bytes]:
+        """Obtém os bytes do certificado A1 a partir de Base64 ou de arquivo em disco."""
+        if self.CERTIFICATE_BASE64:
+            return base64.b64decode(self.CERTIFICATE_BASE64)
+        if self.CERTIFICATE_PATH:
+            with open(self.CERTIFICATE_PATH, "rb") as f:
+                return f.read()
+        return None
+
     def get_status_service_url(self, uf: Optional[str] = None, modelo: Literal["55", "65"] = "55") -> str:
         """Retorna a URL do serviço de Status de Serviço conforme UF, Modelo e Ambiente."""
         target_uf = (uf or self.EMITENTE_UF).upper()
@@ -123,7 +133,6 @@ class Settings(BaseSettings):
                 return self.webservices.SP_NFCE_PRODUCAO_STATUS if is_prod else self.webservices.SP_NFCE_HOMOLOGACAO_STATUS
             return self.webservices.SP_NFE_PRODUCAO_STATUS if is_prod else self.webservices.SP_NFE_HOMOLOGACAO_STATUS
         else:
-            # SVRS padrão para a maioria dos demais estados
             if modelo == "65":
                 return self.webservices.SVRS_NFCE_PRODUCAO_STATUS if is_prod else self.webservices.SVRS_NFCE_HOMOLOGACAO_STATUS
             return self.webservices.SVRS_NFE_PRODUCAO_STATUS if is_prod else self.webservices.SVRS_NFE_HOMOLOGACAO_STATUS

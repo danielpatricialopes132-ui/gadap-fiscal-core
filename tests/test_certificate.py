@@ -1,4 +1,4 @@
-"""Testes unitários para o gerenciador de Certificado Digital A1."""
+"""Testes unitários para o gerenciador de Certificado Digital A1 e Configurações."""
 
 from datetime import datetime, timedelta, timezone
 import base64
@@ -10,7 +10,11 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import pkcs12, BestAvailableEncryption, NoEncryption
 
-from app.core.security.certificate import A1CertificateManager, CertificateError
+from app.core.security.certificate import (
+    A1CertificateManager,
+    CertificateError,
+    ExpirationAlertLevel,
+)
 from app.core.config import Settings, DFEEnvironment
 
 
@@ -21,7 +25,6 @@ def generate_self_signed_pfx(
     expired: bool = False,
 ) -> bytes:
     """Gera um arquivo PFX/P12 em memória para testes unitários."""
-    # Gera chave privada RSA
     private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=2048,
@@ -77,7 +80,7 @@ def generate_self_signed_pfx(
 def test_certificate_loading_and_properties():
     password = "segredo_fiscal"
     cn = "TESTE SOFTWARE FISCAL ME:00000000000191"
-    pfx_data = generate_self_signed_pfx(common_name=cn, password=password, days_valid=30)
+    pfx_data = generate_self_signed_pfx(common_name=cn, password=password, days_valid=300)
 
     mgr = A1CertificateManager(pfx_data=pfx_data, password=password)
 
@@ -86,6 +89,46 @@ def test_certificate_loading_and_properties():
     assert mgr.not_valid_after > datetime.now(timezone.utc)
     assert mgr.not_valid_before < datetime.now(timezone.utc)
     assert len(mgr.get_serial_number()) > 0
+    assert mgr.days_until_expiration() >= 298
+
+
+def test_certificate_expiration_alert_levels():
+    password = "alert_password"
+
+    # 1. Certificado com 200 dias (OK)
+    pfx_ok = generate_self_signed_pfx(password=password, days_valid=200)
+    mgr_ok = A1CertificateManager(pfx_data=pfx_ok, password=password)
+    level, msg, days = mgr_ok.get_expiration_status()
+    assert level == ExpirationAlertLevel.OK
+    assert days > 60
+
+    # 2. Certificado com 45 dias (INFO: <= 60 dias)
+    pfx_info = generate_self_signed_pfx(password=password, days_valid=45)
+    mgr_info = A1CertificateManager(pfx_data=pfx_info, password=password)
+    level, msg, days = mgr_info.get_expiration_status()
+    assert level == ExpirationAlertLevel.INFO
+    assert "AVISO PREVENTIVO" in msg
+
+    # 3. Certificado com 20 dias (WARNING: <= 30 dias)
+    pfx_warn = generate_self_signed_pfx(password=password, days_valid=20)
+    mgr_warn = A1CertificateManager(pfx_data=pfx_warn, password=password)
+    level, msg, days = mgr_warn.get_expiration_status()
+    assert level == ExpirationAlertLevel.WARNING
+    assert "ALERTA:" in msg
+
+    # 4. Certificado com 5 dias (CRITICAL: <= 7 dias)
+    pfx_crit = generate_self_signed_pfx(password=password, days_valid=5)
+    mgr_crit = A1CertificateManager(pfx_data=pfx_crit, password=password)
+    level, msg, days = mgr_crit.get_expiration_status()
+    assert level == ExpirationAlertLevel.CRITICAL
+    assert "ALERTA CRÍTICO" in msg
+
+    # 5. Certificado expirado (EXPIRED)
+    pfx_exp = generate_self_signed_pfx(password=password, expired=True)
+    mgr_exp = A1CertificateManager(pfx_data=pfx_exp, password=password)
+    level, msg, days = mgr_exp.get_expiration_status()
+    assert level == ExpirationAlertLevel.EXPIRED
+    assert "EXPIRADO" in msg
 
 
 def test_certificate_pem_export():
@@ -107,6 +150,7 @@ def test_certificate_expired_detection():
     mgr = A1CertificateManager(pfx_data=pfx_data, password=password)
 
     assert mgr.is_expired() is True
+    assert mgr.days_until_expiration() < 0
 
 
 def test_certificate_from_base64():
@@ -126,20 +170,17 @@ def test_certificate_wrong_password():
 
 
 def test_config_dfe_environment_helpers():
-    # Teste em Homologação
     cfg_hom = Settings(DFE_ENVIRONMENT=DFEEnvironment.HOMOLOGACAO, EMITENTE_UF="SP")
     assert cfg_hom.tp_amb == 2
     assert not cfg_hom.is_production
     assert "homologacao" in cfg_hom.get_status_service_url(modelo="55")
     assert "homologacao" in cfg_hom.get_autorizacao_service_url(modelo="65")
 
-    # Teste em Produção
     cfg_prod = Settings(DFE_ENVIRONMENT=DFEEnvironment.PRODUCAO, EMITENTE_UF="SP")
     assert cfg_prod.tp_amb == 1
     assert cfg_prod.is_production
     assert "homologacao" not in cfg_prod.get_status_service_url(modelo="55")
     assert "homologacao" not in cfg_prod.get_autorizacao_service_url(modelo="65")
 
-    # Teste SVRS
     cfg_rs = Settings(DFE_ENVIRONMENT=DFEEnvironment.HOMOLOGACAO, EMITENTE_UF="RS")
     assert "svrs" in cfg_rs.get_status_service_url(modelo="55")
