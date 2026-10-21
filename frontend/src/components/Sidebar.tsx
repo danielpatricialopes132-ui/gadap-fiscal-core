@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   Building2,
+  HelpCircle,
 } from "lucide-react";
 
 const navigation = [
@@ -17,8 +18,10 @@ const navigation = [
   { name: "Central de Notas", href: "/notas", icon: FileText },
   { name: "Diagnóstico de Rejeições", href: "/rejeicoes", icon: AlertTriangle },
   { name: "Fechamento Contábil", href: "/contabil", icon: FolderArchive },
+  { name: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
+
 
 export function Sidebar() {
   const pathname = usePathname();
