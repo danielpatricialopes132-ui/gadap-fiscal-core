@@ -95,6 +95,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = Field(default=None, description="URL do projeto Supabase")
     SUPABASE_KEY: Optional[str] = Field(default=None, description="Chave de API / Service Key Supabase")
     DATABASE_URL: Optional[str] = Field(default=None, description="String de conexão PostgreSQL do Supabase")
+    SUPABASE_STORAGE_BUCKET: str = Field(default="documentos-fiscais", description="Nome do bucket para XMLs e DANFEs")
 
     # Endpoints de WebServices
     webservices: WebServiceEndpoints = Field(default_factory=WebServiceEndpoints)
