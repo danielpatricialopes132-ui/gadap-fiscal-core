@@ -1,7 +1,8 @@
 """Schemas canônicos de entrada para emissão de Documentos Fiscais Eletrônicos (DF-e).
 
-Isolam a API/domínio das particularidades estruturais do XML da SEFAZ.
-Todos os campos quantitativos e monetários utilizam Decimal para precisão estrita.
+Isolam o ERP/API das particularidades estruturais do XML da SEFAZ.
+Todos os campos quantitativos, percentuais e monetários utilizam estritamente Decimal.
+Inclui chave de idempotência (idempotency_key) para resiliência na submissão.
 """
 
 from decimal import Decimal
@@ -13,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class TipoDocumento(str, Enum):
     NFE = "NFE"      # Modelo 55
     NFCE = "NFCE"    # Modelo 65
-    NFSE = "NFSE"    # Nota Fiscal de Serviço
+    NFSE = "NFSE"    # Nota Fiscal de Serviços Eletrônica
 
 
 class FormaPagamento(str, Enum):
@@ -43,7 +44,7 @@ class EnderecoInput(BaseModel):
     codigo_municipio: str = Field(..., min_length=7, max_length=7, description="Código IBGE do município (7 dígitos)")
     nome_municipio: str = Field(..., min_length=1, max_length=60, description="Nome do município")
     uf: str = Field(..., min_length=2, max_length=2, description="Sigla da UF (ex: SP, RJ, MG)")
-    cep: str = Field(..., min_length=8, max_length=8, description="CEP apenas dígitos")
+    cep: str = Field(..., min_length=8, max_length=8, description="CEP apenas dígitos (8 números)")
 
     @field_validator("cep", "codigo_municipio")
     @classmethod
@@ -58,9 +59,9 @@ class EnderecoInput(BaseModel):
 
 
 class EmitenteInput(BaseModel):
-    cnpj: str = Field(..., description="CNPJ do emitente (14 dígitos)")
-    razao_social: str = Field(..., min_length=2, max_length=60)
-    nome_fantasia: Optional[str] = Field(None, max_length=60)
+    cnpj: str = Field(..., description="CNPJ do emitente (14 dígitos numéricos)")
+    razao_social: str = Field(..., min_length=2, max_length=60, description="Razão Social do Emitente")
+    nome_fantasia: Optional[str] = Field(None, max_length=60, description="Nome Fantasia")
     ie: str = Field(..., min_length=2, max_length=14, description="Inscrição Estadual")
     crt: Literal["1"] = Field(
         default="1",
@@ -73,19 +74,19 @@ class EmitenteInput(BaseModel):
     def clean_cnpj(cls, v: str) -> str:
         digits = "".join(filter(str.isdigit, v))
         if len(digits) != 14:
-            raise ValueError("CNPJ do emitente deve conter 14 dígitos numéricos.")
+            raise ValueError("CNPJ do emitente deve conter exatamente 14 dígitos numéricos.")
         return digits
 
 
 class DestinatarioInput(BaseModel):
     cpf_cnpj: str = Field(..., description="CPF (11 dígitos) ou CNPJ (14 dígitos)")
-    razao_social: str = Field(..., min_length=2, max_length=60, description="Razão Social ou Nome do Comprador")
-    ie: Optional[str] = Field(None, description="Inscrição Estadual (obrigatória se ind_iedest=1)")
+    razao_social: str = Field(..., min_length=2, max_length=60, description="Razão Social ou Nome do Destinatário")
+    ie: Optional[str] = Field(None, description="Inscrição Estadual (obrigatória se ind_iedest = '1')")
     ind_iedest: Literal["1", "2", "9"] = Field(
         default="9",
         description="1 = Contribuinte ICMS, 2 = Contribuinte Isento, 9 = Não Contribuinte",
     )
-    email: Optional[str] = Field(None, max_length=60)
+    email: Optional[str] = Field(None, max_length=60, description="E-mail para envio do XML/DANFE")
     endereco: Optional[EnderecoInput] = Field(
         None,
         description="Endereço do destinatário (obrigatório para NF-e mod 55)",
@@ -116,35 +117,35 @@ class ItemInput(BaseModel):
     quantidade: Decimal = Field(..., gt=Decimal("0"), description="Quantidade comercial")
     valor_unitario: Decimal = Field(..., gt=Decimal("0"), description="Valor unitário de comercialização")
     desconto: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Valor do desconto no item")
-    outras_despesas: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0"))
-    frete: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0"))
-    seguro: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0"))
+    outras_despesas: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Outras despesas acessórias")
+    frete: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Rateio de frete")
+    seguro: Decimal = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Rateio de seguro")
 
     # Tributação Simples Nacional
     origem: Literal["0", "1", "2", "3", "4", "5", "6", "7", "8"] = Field(
         default="0",
-        description="Origem da mercadoria (0=Nacional, 1=Estrangeira direta, 2=Estrangeira adquirida no mercado interno, etc.)",
+        description="Origem da mercadoria (0=Nacional, 1=Estrangeira direta, 2=Estrangeira interna, etc.)",
     )
     csosn: Literal["101", "102", "103", "201", "202", "203", "300", "400", "500", "900"] = Field(
         default="102",
         description="Código de Situação da Operação no Simples Nacional",
     )
 
-    # Parâmetros fiscais complementares
+    # Parâmetros fiscais complementares para CSOSN 101/201
     aliquota_credito_sn: Optional[Decimal] = Field(
         default=None,
         ge=Decimal("0"),
         le=Decimal("100"),
-        description="Alíquota aplicável de cálculo do crédito de ICMS (% pCredSN) - obrigatória para CSOSN 101/201",
+        description="Alíquota aplicável de cálculo do crédito de ICMS (% pCredSN)",
     )
 
     # Campos específicos para CSOSN 500 (ICMS Cobrado anteriormente por Substituição Tributária)
     v_bc_st_ret: Optional[Decimal] = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Base de cálculo do ICMS ST retido")
-    p_st: Optional[Decimal] = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Alíquota do ICMS ST")
+    p_st: Optional[Decimal] = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Alíquota do ICMS ST retido")
     v_icms_substituto: Optional[Decimal] = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Valor do ICMS próprio do substituto")
     v_icms_st_ret: Optional[Decimal] = Field(default=Decimal("0.00"), ge=Decimal("0"), description="Valor do ICMS ST retido anteriormente")
 
-    # Informações aproximadas de tributos (Lei da Transparência / IBPT)
+    # Transparência fiscal (Lei 12.741/2012 / IBPT)
     valor_tributos_aproximado: Optional[Decimal] = Field(
         default=None,
         ge=Decimal("0"),
@@ -175,14 +176,19 @@ class PagamentoInput(BaseModel):
 
 
 class DocumentoFiscalInput(BaseModel):
-    tipo_documento: TipoDocumento = Field(..., description="Tipo do documento: NFE, NFCE ou NFSE")
+    idempotency_key: Optional[str] = Field(
+        None,
+        max_length=64,
+        description="Chave única de idempotência do ERP solicitante para evitar duplicidade de emissão",
+    )
+    tipo_documento: TipoDocumento = Field(..., description="Tipo do documento: NFE (55), NFCE (65) ou NFSE")
     natureza_operacao: str = Field(default="VENDA DE MERCADORIA", min_length=1, max_length=60)
     serie: int = Field(default=1, ge=1, le=999)
     numero: int = Field(..., ge=1, le=999999999)
     emitente: EmitenteInput
     destinatario: Optional[DestinatarioInput] = Field(
         None,
-        description="Destinatário (opcional em NFC-e com valor até R$ 10.000, obrigatório em NF-e)",
+        description="Destinatário (opcional em NFC-e com valor até o limite legal, obrigatório em NF-e)",
     )
     itens: List[ItemInput] = Field(..., min_length=1, max_length=990)
     pagamentos: List[PagamentoInput] = Field(..., min_length=1)
