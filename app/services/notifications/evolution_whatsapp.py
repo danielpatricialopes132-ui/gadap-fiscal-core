@@ -59,30 +59,31 @@ class EvolutionWhatsAppClient:
         """Dispara uma mensagem de texto simples.
 
         Endpoint: POST {base_url}/message/sendText/{instance}
+        Compatível com Evolution API v1.x e v2.x (versão instalada: 2.3.7).
         """
         numero_formatado = self.sanitizar_numero(telefone)
         url = f"{self.base_url}/message/sendText/{self.instance}"
         payload = {
             "number": numero_formatado,
-            "options": {
-                "delay": 1200,
-                "presence": "composing",
-                "linkPreview": True,
-            },
-            "textMessage": {
-                "text": texto,
-            },
+            "text": texto,
+            "delay": 1200,
         }
 
         try:
             logger.info(f"Disparando WhatsApp texto para {numero_formatado}...")
-            resp = requests.post(url, headers=self.headers, json=payload, timeout=20)
+            resp = requests.post(url, headers=self.headers, json=payload, timeout=25)
             data = resp.json() if resp.text else {}
             if resp.status_code in (200, 201):
+                msg_id = (
+                    data.get("key", {}).get("id")
+                    or data.get("id")
+                    or data.get("messageId")
+                )
+                logger.info(f"WhatsApp texto enviado com sucesso! Message ID: {msg_id}")
                 return {
                     "sucesso": True,
                     "status_code": resp.status_code,
-                    "message_id": data.get("key", {}).get("id") or data.get("id"),
+                    "message_id": msg_id,
                     "data": data,
                 }
             logger.warning(f"Evolution API retornou status {resp.status_code}: {resp.text}")
@@ -101,32 +102,34 @@ class EvolutionWhatsAppClient:
         """Dispara um documento PDF através do endpoint sendMedia.
 
         Endpoint: POST {base_url}/message/sendMedia/{instance}
+        Compatível com Evolution API v2.3.7.
         """
         numero_formatado = self.sanitizar_numero(telefone)
         url = f"{self.base_url}/message/sendMedia/{self.instance}"
         payload = {
             "number": numero_formatado,
-            "options": {
-                "delay": 1200,
-                "presence": "composing",
-            },
-            "mediaMessage": {
-                "mediatype": "document",
-                "fileName": nome_arquivo,
-                "caption": legenda,
-                "media": pdf_url,
-            },
+            "mediatype": "document",
+            "media": pdf_url,
+            "fileName": nome_arquivo,
+            "caption": legenda,
+            "delay": 1200,
         }
 
         try:
             logger.info(f"Enviando PDF via WhatsApp para {numero_formatado}: {pdf_url}")
-            resp = requests.post(url, headers=self.headers, json=payload, timeout=25)
+            resp = requests.post(url, headers=self.headers, json=payload, timeout=35)
             data = resp.json() if resp.text else {}
             if resp.status_code in (200, 201):
+                msg_id = (
+                    data.get("key", {}).get("id")
+                    or data.get("id")
+                    or data.get("messageId")
+                )
+                logger.info(f"DANFE PDF enviado com sucesso! Message ID: {msg_id}")
                 return {
                     "sucesso": True,
                     "status_code": resp.status_code,
-                    "message_id": data.get("key", {}).get("id") or data.get("id"),
+                    "message_id": msg_id,
                     "data": data,
                 }
             logger.warning(f"Evolution API sendMedia retornou {resp.status_code}: {resp.text}")

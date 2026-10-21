@@ -7,8 +7,13 @@ Provedor: Evolution API
 
 import sys
 import logging
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from app.core.config import settings
 from app.services.notifications.evolution_whatsapp import EvolutionWhatsAppClient
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("teste_disparo_whatsapp")

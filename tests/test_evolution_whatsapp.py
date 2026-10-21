@@ -63,7 +63,7 @@ def test_enviar_mensagem_texto(mock_post):
     assert called_kwargs["headers"]["apikey"] == "Gabriel2006!"
     assert called_kwargs["headers"]["Content-Type"] == "application/json"
     assert called_kwargs["json"]["number"] == "5511999998888"
-    assert called_kwargs["json"]["textMessage"]["text"] == "Mensagem de teste SEFAZ"
+    assert called_kwargs["json"]["text"] == "Mensagem de teste SEFAZ"
 
 
 @patch("requests.post")
@@ -98,9 +98,10 @@ def test_enviar_documento_pdf(mock_post):
     assert called_args[0] == "https://whatsapp-ecostone.onrender.com/message/sendMedia/ecostone"
     assert called_kwargs["headers"]["apikey"] == "Gabriel2006!"
     assert called_kwargs["json"]["number"] == "5511988887777"
-    assert called_kwargs["json"]["mediaMessage"]["mediatype"] == "document"
-    assert called_kwargs["json"]["mediaMessage"]["media"] == pdf_url
-    assert called_kwargs["json"]["mediaMessage"]["caption"] == "Segue o DANFE da sua nota"
+    assert called_kwargs["json"]["mediatype"] == "document"
+    assert called_kwargs["json"]["media"] == pdf_url
+    assert called_kwargs["json"]["caption"] == "Segue o DANFE da sua nota"
+
 
 
 @patch("requests.post")
@@ -126,11 +127,12 @@ def test_enviar_notificacao_nota_autorizada(mock_post):
     assert res["message_id"] == "EVO_FULL_888"
 
     payload_enviado = mock_post.call_args[1]["json"]
-    legenda = payload_enviado["mediaMessage"]["caption"]
+    legenda = payload_enviado["caption"]
     assert "Supermercado Silva" in legenda
     assert "123" in legenda
     assert "35240212345678000195550010000001231000001234" in legenda
     assert "ECOSTONE LTDA" in legenda
+
 
 
 @patch("app.services.notifications.evolution_whatsapp.EvolutionWhatsAppClient.enviar_notificacao_nota_autorizada")
