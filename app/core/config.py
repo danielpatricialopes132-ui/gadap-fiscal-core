@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     CSC_PRODUCAO_ID: str = Field(default="", description="IdToken / Identificador do CSC de produção")
     CSC_PRODUCAO_TOKEN: str = Field(default="", description="Código alfanumérico do CSC de produção")
 
+    # Supabase (Banco de Dados & Storage)
+    SUPABASE_URL: Optional[str] = Field(default=None, description="URL do projeto Supabase")
+    SUPABASE_KEY: Optional[str] = Field(default=None, description="Chave de API / Service Key Supabase")
+    DATABASE_URL: Optional[str] = Field(default=None, description="String de conexão PostgreSQL do Supabase")
+
     # Endpoints de WebServices
     webservices: WebServiceEndpoints = Field(default_factory=WebServiceEndpoints)
 
