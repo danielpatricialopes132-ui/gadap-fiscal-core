@@ -5,48 +5,8 @@ cUF (2) + AAMM (4) + CNPJ (14) + mod (2) + serie (3) + nNF (9) + tpEmis (1) + cN
 Dígito Verificador calculado via Módulo 11 (pesos de 2 a 9).
 """
 
-from typing import Dict
 import random
-
-
-# Tabela oficial de Códigos de UF do IBGE
-UF_IBGE_CODES: Dict[str, str] = {
-    "RO": "11",
-    "AC": "12",
-    "AM": "13",
-    "RR": "14",
-    "PA": "15",
-    "AP": "16",
-    "TO": "17",
-    "MA": "21",
-    "PI": "22",
-    "CE": "23",
-    "RN": "24",
-    "PB": "25",
-    "PE": "26",
-    "AL": "27",
-    "SE": "28",
-    "BA": "29",
-    "MG": "31",
-    "ES": "32",
-    "RJ": "33",
-    "SP": "35",
-    "PR": "41",
-    "SC": "42",
-    "RS": "43",
-    "MS": "50",
-    "MT": "51",
-    "GO": "52",
-    "DF": "53",
-}
-
-
-def get_uf_ibge_code(uf: str) -> str:
-    """Retorna o código de 2 dígitos do IBGE para a UF fornecida."""
-    code = UF_IBGE_CODES.get(uf.strip().upper())
-    if not code:
-        raise ValueError(f"UF inválida ou não mapeada: {uf}")
-    return code
+from app.core.uf_matrix import get_cuf_by_uf
 
 
 def calculate_mod11_dv(chave_43: str) -> int:
@@ -67,7 +27,6 @@ def calculate_mod11_dv(chave_43: str) -> int:
     soma = 0
     peso_idx = 0
 
-    # Percorre da direita para a esquerda
     for digito in reversed(chave_43):
         soma += int(digito) * pesos[peso_idx]
         peso_idx = (peso_idx + 1) % len(pesos)
@@ -96,7 +55,7 @@ def build_access_key(
     """Monta a chave de acesso completa de 44 dígitos com cDV calculado determinísticamente.
 
     Args:
-        c_uf: Código da UF (2 dígitos) ou sigla da UF (ex: '35' ou 'SP')
+        c_uf: Código numérico da UF (2 dígitos) ou sigla da UF (ex: '35', '29', 'SP', 'BA')
         ano_mes: AAMM da emissão (ex: '2610')
         cnpj: CNPJ do emitente (14 dígitos numéricos)
         modelo: '55' (NF-e) ou '65' (NFC-e)
@@ -108,11 +67,12 @@ def build_access_key(
     Returns:
         str: Chave de acesso com 44 dígitos.
     """
-    # Se passou a sigla em vez do código numérico, converte
-    if len(c_uf) == 2 and not c_uf.isdigit():
-        c_uf_fmt = get_uf_ibge_code(c_uf)
+    # Lê obrigatoriamente a partir de uf_matrix se for sigla ou código
+    c_uf_clean = c_uf.strip().upper()
+    if len(c_uf_clean) == 2 and not c_uf_clean.isdigit():
+        c_uf_fmt = get_cuf_by_uf(c_uf_clean)
     else:
-        c_uf_fmt = f"{int(c_uf):02d}"
+        c_uf_fmt = f"{int(c_uf_clean):02d}"
 
     ano_mes_fmt = "".join(filter(str.isdigit, ano_mes))
     if len(ano_mes_fmt) != 4:

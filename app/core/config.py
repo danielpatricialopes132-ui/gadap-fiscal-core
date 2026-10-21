@@ -125,31 +125,24 @@ class Settings(BaseSettings):
 
     def get_status_service_url(self, uf: Optional[str] = None, modelo: Literal["55", "65"] = "55") -> str:
         """Retorna a URL do serviço de Status de Serviço conforme UF, Modelo e Ambiente."""
+        from app.services.sefaz.endpoints import resolve_webservices
         target_uf = (uf or self.EMITENTE_UF).upper()
-        is_prod = self.is_production
-
-        if target_uf == "SP":
-            if modelo == "65":
-                return self.webservices.SP_NFCE_PRODUCAO_STATUS if is_prod else self.webservices.SP_NFCE_HOMOLOGACAO_STATUS
-            return self.webservices.SP_NFE_PRODUCAO_STATUS if is_prod else self.webservices.SP_NFE_HOMOLOGACAO_STATUS
-        else:
-            if modelo == "65":
-                return self.webservices.SVRS_NFCE_PRODUCAO_STATUS if is_prod else self.webservices.SVRS_NFCE_HOMOLOGACAO_STATUS
-            return self.webservices.SVRS_NFE_PRODUCAO_STATUS if is_prod else self.webservices.SVRS_NFE_HOMOLOGACAO_STATUS
+        endpoints = resolve_webservices(uf=target_uf, modelo=modelo, is_production=self.is_production)
+        return endpoints.status_servico
 
     def get_autorizacao_service_url(self, uf: Optional[str] = None, modelo: Literal["55", "65"] = "55") -> str:
         """Retorna a URL do serviço de Autorização conforme UF, Modelo e Ambiente."""
+        from app.services.sefaz.endpoints import resolve_webservices
         target_uf = (uf or self.EMITENTE_UF).upper()
-        is_prod = self.is_production
+        endpoints = resolve_webservices(uf=target_uf, modelo=modelo, is_production=self.is_production)
+        return endpoints.autorizacao
 
-        if target_uf == "SP":
-            if modelo == "65":
-                return self.webservices.SP_NFCE_PRODUCAO_AUTORIZACAO if is_prod else self.webservices.SP_NFCE_HOMOLOGACAO_AUTORIZACAO
-            return self.webservices.SP_NFE_PRODUCAO_AUTORIZACAO if is_prod else self.webservices.SP_NFE_HOMOLOGACAO_AUTORIZACAO
-        else:
-            if modelo == "65":
-                return self.webservices.SVRS_NFCE_PRODUCAO_AUTORIZACAO if is_prod else self.webservices.SVRS_NFCE_HOMOLOGACAO_AUTORIZACAO
-            return self.webservices.SVRS_NFE_PRODUCAO_AUTORIZACAO if is_prod else self.webservices.SVRS_NFE_HOMOLOGACAO_AUTORIZACAO
+    def get_ret_autorizacao_service_url(self, uf: Optional[str] = None, modelo: Literal["55", "65"] = "55") -> str:
+        """Retorna a URL do serviço de Consulta do Recibo de Lote (RetAutorizacao)."""
+        from app.services.sefaz.endpoints import resolve_webservices
+        target_uf = (uf or self.EMITENTE_UF).upper()
+        endpoints = resolve_webservices(uf=target_uf, modelo=modelo, is_production=self.is_production)
+        return endpoints.ret_autorizacao
 
 
 settings = Settings()

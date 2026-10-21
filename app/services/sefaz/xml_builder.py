@@ -1,7 +1,11 @@
 """Serializador de Documentos Fiscais Eletrônicos (NF-e mod 55 e NFC-e mod 65) em XML SEFAZ v4.00.
 
 Gera a árvore XML completa em conformidade com o Manual de Orientação do Contribuinte (MOC 7.0 / NT 2020.005),
-com comutação automática entre Homologação e Produção e tratamento do infNFeSupl da NFC-e.
+com suporte dinâmico a cenários Multi-UF:
+- Cenário A: Operação Interna (idDest=1, CFOP 5xxx) vs. Interestadual (idDest=2, CFOP 6xxx)
+- Cenário B: Não Contribuinte / B2C Interestadual no Simples Nacional (isento de ICMSUFDest / ADI 5464)
+- Cenário C: Emitente na Bahia (BA) com QR Code oficial da SEFAZ-BA
+- Cenário D: Substituição Tributária (CSOSN 500) com omissão graciosa de bases não retidas
 """
 
 from datetime import datetime, timezone
@@ -11,7 +15,8 @@ from lxml import etree
 
 from app.schemas.canonical import TipoDocumento
 from app.services.tax_engine import DocumentoProcessado
-from app.services.sefaz.access_key import build_access_key, get_uf_ibge_code
+from app.services.sefaz.access_key import build_access_key
+from app.core.uf_matrix import get_cuf_by_uf, get_nfce_qr_code_url
 from app.core.config import settings, DFEEnvironment
 
 
@@ -34,8 +39,23 @@ class NFeXmlBuilder:
         self.modelo = "65" if self.is_nfce else "55"
         self.is_homologacao = settings.DFE_ENVIRONMENT == DFEEnvironment.HOMOLOGACAO
 
+        # UFs do emitente e destinatário
+        self.uf_emitente = self.doc.emitente.endereco.uf.strip().upper()
+        self.c_uf = get_cuf_by_uf(self.uf_emitente)
+
+        # Determinação de Operação Interna vs. Interestadual (Cenário A)
+        self.uf_destinatario: Optional[str] = None
+        if self.doc.destinatario and self.doc.destinatario.endereco:
+            self.uf_destinatario = self.doc.destinatario.endereco.uf.strip().upper()
+
+        if self.is_nfce or not self.uf_destinatario or (self.uf_destinatario == self.uf_emitente):
+            self.id_dest = "1"  # Operação Interna
+        else:
+            self.id_dest = "2"  # Operação Interestadual
+
+        self._validate_cfop_dest_destination()
+
         # Chave de acesso de 44 dígitos
-        self.c_uf = get_uf_ibge_code(self.doc.emitente.endereco.uf)
         self.ano_mes = self.data_emissao.strftime("%y%m")
         self.chave_acesso = build_access_key(
             c_uf=self.c_uf,
@@ -47,6 +67,18 @@ class NFeXmlBuilder:
             tp_emis="1",  # 1=Normal
             c_nf=c_nf,
         )
+
+    def _validate_cfop_dest_destination(self) -> None:
+        """Valida se os CFOPs dos itens são coerentes com o destino da operação (Cenário A)."""
+        expected_prefix = "5" if self.id_dest == "1" else "6"
+        for item in self.itens:
+            cfop = item.cfop.strip()
+            if not cfop.startswith(expected_prefix):
+                tipo_op = "interna" if self.id_dest == "1" else "interestadual"
+                raise ValueError(
+                    f"Item {item.numero_item}: CFOP '{cfop}' inconsistente com operação {tipo_op} "
+                    f"(idDest={self.id_dest}). CFOP esperado iniciando com '{expected_prefix}'."
+                )
 
     def _el(self, parent: etree._Element, tag: str, text: Optional[str] = None) -> etree._Element:
         """Cria e anexa um elemento XML filho com texto."""
@@ -75,7 +107,7 @@ class NFeXmlBuilder:
         self._build_pag(inf_nfe)
         self._build_inf_adic(inf_nfe)
 
-        # Se for NFC-e, anexa a estrutura do infNFeSupl (reserva para QR Code)
+        # Se for NFC-e, anexa o nó infNFeSupl com a URL correta por estado (Cenário C)
         if self.is_nfce:
             self._build_inf_nfe_supl(nfe)
 
@@ -101,18 +133,16 @@ class NFeXmlBuilder:
         self._el(ide, "serie", str(self.doc.serie))
         self._el(ide, "nNF", str(self.doc.numero))
 
-        # Formato de data SEFAZ: AAAA-MM-DDTHH:MM:SS-03:00 (ou com UTC offset)
         dh_emi = self.data_emissao.strftime("%Y-%m-%dT%H:%M:%S%z")
         if not self.data_emissao.tzinfo:
             dh_emi = f"{self.data_emissao.strftime('%Y-%m-%dT%H:%M:%S')}-03:00"
         self._el(ide, "dhEmi", dh_emi)
 
         self._el(ide, "tpNF", "1")  # 1=Saída
-        self._el(ide, "idDest", "1")  # 1=Interna
+        self._el(ide, "idDest", self.id_dest)  # 1=Interna, 2=Interestadual (Cenário A)
         self._el(ide, "cMunFG", self.doc.emitente.endereco.codigo_municipio)
 
-        # Formato de Impressão do DANFE
-        # 1=Retrato (NF-e), 4=DANFE NFC-e
+        # Formato de Impressão do DANFE: 1=Retrato (NF-e), 4=DANFE NFC-e
         tp_imp = "4" if self.is_nfce else "1"
         self._el(ide, "tpImp", tp_imp)
 
@@ -120,8 +150,8 @@ class NFeXmlBuilder:
         self._el(ide, "cDV", self.chave_acesso[43])
         self._el(ide, "tpAmb", str(settings.tp_amb))
         self._el(ide, "finNFe", "1")  # 1=Normal
-        self._el(ide, "indFinal", "1")  # 1=Consumidor final
-        self._el(ide, "indPres", "1" if self.is_nfce else "1")  # 1=Presencial
+        self._el(ide, "indFinal", "1")  # 1=Consumidor final (Cenário B)
+        self._el(ide, "indPres", "1")   # 1=Operação presencial
         self._el(ide, "procEmi", "0")  # 0=Aplicativo do contribuinte
         self._el(ide, "verProc", settings.APP_VERSION)
 
@@ -154,7 +184,6 @@ class NFeXmlBuilder:
         """Grupo <dest>: Identificação do Destinatário com comutação de homologação."""
         dest_input = self.doc.destinatario
 
-        # Em NFC-e o destinatário é opcional
         if self.is_nfce and not dest_input:
             return
 
@@ -168,7 +197,6 @@ class NFeXmlBuilder:
         else:
             self._el(dest, "CPF", doc_digits)
 
-        # Regra SEFAZ para ambiente de Homologação
         if self.is_homologacao:
             self._el(dest, "xNome", "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL")
         else:
@@ -225,16 +253,17 @@ class NFeXmlBuilder:
             if item.outras_despesas > Decimal("0.00"):
                 self._el(prod, "vOutro", f"{item.outras_despesas:.2f}")
 
-            self._el(prod, "indTot", "1")  # 1=Compõe o valor total da nota
+            self._el(prod, "indTot", "1")
 
-            # Grupo <imposto>
             imposto = self._el(det, "imposto")
             if item.v_tot_trib > Decimal("0.00"):
                 self._el(imposto, "vTotTrib", f"{item.v_tot_trib:.2f}")
 
-            # ICMS do Simples Nacional
             icms = self._el(imposto, "ICMS")
             self._build_icms_sn(icms, item)
+
+            # Cenário B: CRT = 1 (Simples Nacional) NUNCA gera ICMSUFDest (DIFAL da EC 87/2015 suspenso pelo STF)
+            # O grupo ICMSUFDest é omitido propositalmente para emitentes optantes pelo Simples Nacional.
 
             # PIS
             pis = self._el(imposto, "PIS")
@@ -253,7 +282,7 @@ class NFeXmlBuilder:
             self._el(cofins_outr, "vCOFINS", f"{item.cofins_v_cofins:.2f}")
 
     def _build_icms_sn(self, parent: etree._Element, item) -> None:
-        """Gera o nó específico do ICMS no Simples Nacional conforme CSOSN."""
+        """Gera o nó específico do ICMS no Simples Nacional conforme CSOSN (Cenário D)."""
         csosn = item.csosn
         tag_name = f"ICMSSN{csosn}"
         icms_node = self._el(parent, tag_name)
@@ -265,6 +294,7 @@ class NFeXmlBuilder:
             self._el(icms_node, "vCredICMSSN", f"{item.v_cred_icms:.2f}")
 
         elif csosn == "500":
+            # Cenário D: Monta ICMSSN500 apenas com orig e CSOSN se não houver retenção anterior a declarar
             if item.v_bc_st_ret and item.v_bc_st_ret > Decimal("0.00"):
                 self._el(icms_node, "vBCSTRet", f"{item.v_bc_st_ret:.2f}")
                 self._el(icms_node, "pST", f"{item.p_st:.4f}")
@@ -299,13 +329,12 @@ class NFeXmlBuilder:
             self._el(icms_tot, "vTotTrib", f"{self.totais.v_tot_trib:.2f}")
 
     def _build_transp(self, parent: etree._Element) -> None:
-        """Grupo <transp>: Modalidade do frete."""
+        """Grupo <transp>: Modalidade do frete (9=Sem Ocorrência de Transporte)."""
         transp = self._el(parent, "transp")
-        # 9=Sem Ocorrência de Transporte
         self._el(transp, "modFrete", "9")
 
     def _build_cobr(self, parent: etree._Element) -> None:
-        """Grupo <cobr>: Dados de fatura (opcional se não tiver parcelamento)."""
+        """Grupo <cobr>: Dados de fatura."""
         pass
 
     def _build_pag(self, parent: etree._Element) -> None:
@@ -328,7 +357,9 @@ class NFeXmlBuilder:
         self._el(inf_adic, "infCpl", msg)
 
     def _build_inf_nfe_supl(self, parent: etree._Element) -> None:
-        """Grupo <infNFeSupl>: Reserva técnica para NFC-e (QR Code e URL de consulta)."""
+        """Grupo <infNFeSupl>: QR Code e URL de consulta oficial da UF do emitente (Cenário C)."""
+        qr_url = get_nfce_qr_code_url(self.uf_emitente, is_production=not self.is_homologacao)
+
         supl = self._el(parent, "infNFeSupl")
-        self._el(supl, "qrCode", "PENDENTE_ASSINATURA_QRCODE")
-        self._el(supl, "urlChave", f"https://www.nfce.fazenda.sp.gov.br/consulta?chNFe={self.chave_acesso}")
+        self._el(supl, "qrCode", f"{qr_url}?p={self.chave_acesso}|2|{settings.tp_amb}|{settings.active_csc_id}")
+        self._el(supl, "urlChave", qr_url)
