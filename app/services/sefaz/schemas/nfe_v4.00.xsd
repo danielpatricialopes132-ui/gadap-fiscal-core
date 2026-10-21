@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="http://www.portalfiscal.inf.br/nfe"
+           targetNamespace="http://www.portalfiscal.inf.br/nfe"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+    <xs:element name="NFe">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="infNFe">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <!-- Identificação da NF-e -->
+                            <xs:element name="ide">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="cUF" type="xs:string"/>
+                                        <xs:element name="cNF" type="xs:string"/>
+                                        <xs:element name="natOp" type="xs:string"/>
+                                        <xs:element name="mod" type="xs:string"/>
+                                        <xs:element name="serie" type="xs:string"/>
+                                        <xs:element name="nNF" type="xs:string"/>
+                                        <xs:element name="dhEmi" type="xs:string"/>
+                                        <xs:element name="tpNF" type="xs:string"/>
+                                        <xs:element name="idDest" type="xs:string"/>
+                                        <xs:element name="cMunFG" type="xs:string"/>
+                                        <xs:element name="tpImp" type="xs:string"/>
+                                        <xs:element name="tpEmis" type="xs:string"/>
+                                        <xs:element name="cDV" type="xs:string"/>
+                                        <xs:element name="tpAmb" type="xs:string"/>
+                                        <xs:element name="finNFe" type="xs:string"/>
+                                        <xs:element name="indFinal" type="xs:string"/>
+                                        <xs:element name="indPres" type="xs:string"/>
+                                        <xs:element name="procEmi" type="xs:string"/>
+                                        <xs:element name="verProc" type="xs:string"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+
+                            <!-- Emitente -->
+                            <xs:element name="emit">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="CNPJ" type="xs:string"/>
+                                        <xs:element name="xNome" type="xs:string"/>
+                                        <xs:element name="xFant" minOccurs="0" type="xs:string"/>
+                                        <xs:element name="enderEmit">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="xLgr" type="xs:string"/>
+                                                    <xs:element name="nro" type="xs:string"/>
+                                                    <xs:element name="xCpl" minOccurs="0" type="xs:string"/>
+                                                    <xs:element name="xBairro" type="xs:string"/>
+                                                    <xs:element name="cMun" type="xs:string"/>
+                                                    <xs:element name="xMun" type="xs:string"/>
+                                                    <xs:element name="UF" type="xs:string"/>
+                                                    <xs:element name="CEP" type="xs:string"/>
+                                                    <xs:element name="cPais" type="xs:string"/>
+                                                    <xs:element name="xPais" type="xs:string"/>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="IE" type="xs:string"/>
+                                        <xs:element name="CRT" type="xs:string"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+
+                            <!-- Destinatário (opcional para NFC-e) -->
+                            <xs:element name="dest" minOccurs="0">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:choice>
+                                            <xs:element name="CNPJ" type="xs:string"/>
+                                            <xs:element name="CPF" type="xs:string"/>
+                                        </xs:choice>
+                                        <xs:element name="xNome" type="xs:string"/>
+                                        <xs:element name="enderDest" minOccurs="0">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="xLgr" type="xs:string"/>
+                                                    <xs:element name="nro" type="xs:string"/>
+                                                    <xs:element name="xCpl" minOccurs="0" type="xs:string"/>
+                                                    <xs:element name="xBairro" type="xs:string"/>
+                                                    <xs:element name="cMun" type="xs:string"/>
+                                                    <xs:element name="xMun" type="xs:string"/>
+                                                    <xs:element name="UF" type="xs:string"/>
+                                                    <xs:element name="CEP" type="xs:string"/>
+                                                    <xs:element name="cPais" type="xs:string"/>
+                                                    <xs:element name="xPais" type="xs:string"/>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="indIEDest" type="xs:string"/>
+                                        <xs:element name="IE" minOccurs="0" type="xs:string"/>
+                                        <xs:element name="email" minOccurs="0" type="xs:string"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+
+                            <!-- Detalhamento de Itens -->
+                            <xs:element name="det" maxOccurs="990">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="prod">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="cProd" type="xs:string"/>
+                                                    <xs:element name="cEAN" type="xs:string"/>
+                                                    <xs:element name="xProd" type="xs:string"/>
+                                                    <xs:element name="NCM" type="xs:string"/>
+                                                    <xs:element name="CFOP" type="xs:string"/>
+                                                    <xs:element name="uCom" type="xs:string"/>
+                                                    <xs:element name="qCom" type="xs:string"/>
+                                                    <xs:element name="vUnCom" type="xs:string"/>
+                                                    <xs:element name="vProd" type="xs:string"/>
+                                                    <xs:element name="cEANTrib" type="xs:string"/>
+                                                    <xs:element name="uTrib" type="xs:string"/>
+                                                    <xs:element name="qTrib" type="xs:string"/>
+                                                    <xs:element name="vUnTrib" type="xs:string"/>
+                                                    <xs:element name="vFrete" minOccurs="0" type="xs:string"/>
+                                                    <xs:element name="vSeg" minOccurs="0" type="xs:string"/>
+                                                    <xs:element name="vDesc" minOccurs="0" type="xs:string"/>
+                                                    <xs:element name="vOutro" minOccurs="0" type="xs:string"/>
+                                                    <xs:element name="indTot" type="xs:string"/>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+
+                                        <xs:element name="imposto">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="vTotTrib" minOccurs="0" type="xs:string"/>
+                                                    <xs:element name="ICMS">
+                                                        <xs:complexType>
+                                                            <xs:choice>
+                                                                <xs:element name="ICMSSN101">
+                                                                    <xs:complexType>
+                                                                        <xs:sequence>
+                                                                            <xs:element name="orig" type="xs:string"/>
+                                                                            <xs:element name="CSOSN" type="xs:string"/>
+                                                                            <xs:element name="pCredSN" type="xs:string"/>
+                                                                            <xs:element name="vCredICMSSN" type="xs:string"/>
+                                                                        </xs:sequence>
+                                                                    </xs:complexType>
+                                                                </xs:element>
+                                                                <xs:element name="ICMSSN102">
+                                                                    <xs:complexType>
+                                                                        <xs:sequence>
+                                                                            <xs:element name="orig" type="xs:string"/>
+                                                                            <xs:element name="CSOSN" type="xs:string"/>
+                                                                        </xs:sequence>
+                                                                    </xs:complexType>
+                                                                </xs:element>
+                                                                <xs:element name="ICMSSN500">
+                                                                    <xs:complexType>
+                                                                        <xs:sequence>
+                                                                            <xs:element name="orig" type="xs:string"/>
+                                                                            <xs:element name="CSOSN" type="xs:string"/>
+                                                                            <xs:element name="vBCSTRet" minOccurs="0" type="xs:string"/>
+                                                                            <xs:element name="pST" minOccurs="0" type="xs:string"/>
+                                                                            <xs:element name="vICMSSubstituto" minOccurs="0" type="xs:string"/>
+                                                                            <xs:element name="vICMSSTRet" minOccurs="0" type="xs:string"/>
+                                                                        </xs:sequence>
+                                                                    </xs:complexType>
+                                                                </xs:element>
+                                                            </xs:choice>
+                                                        </xs:complexType>
+                                                    </xs:element>
+
+                                                    <xs:element name="PIS">
+                                                        <xs:complexType>
+                                                            <xs:sequence>
+                                                                <xs:element name="PISOutr">
+                                                                    <xs:complexType>
+                                                                        <xs:sequence>
+                                                                            <xs:element name="CST" type="xs:string"/>
+                                                                            <xs:element name="vBC" type="xs:string"/>
+                                                                            <xs:element name="pPIS" type="xs:string"/>
+                                                                            <xs:element name="vPIS" type="xs:string"/>
+                                                                        </xs:sequence>
+                                                                    </xs:complexType>
+                                                                </xs:element>
+                                                            </xs:sequence>
+                                                        </xs:complexType>
+                                                    </xs:element>
+
+                                                    <xs:element name="COFINS">
+                                                        <xs:complexType>
+                                                            <xs:sequence>
+                                                                <xs:element name="COFINSOutr">
+                                                                    <xs:complexType>
+                                                                        <xs:sequence>
+                                                                            <xs:element name="CST" type="xs:string"/>
+                                                                            <xs:element name="vBC" type="xs:string"/>
+                                                                            <xs:element name="pCOFINS" type="xs:string"/>
+                                                                            <xs:element name="vCOFINS" type="xs:string"/>
+                                                                        </xs:sequence>
+                                                                    </xs:complexType>
+                                                                </xs:element>
+                                                            </xs:sequence>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                    <xs:attribute name="nItem" use="required" type="xs:string"/>
+                                </xs:complexType>
+                            </xs:element>
+
+                            <!-- Totais -->
+                            <xs:element name="total">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="ICMSTot">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="vBC" type="xs:string"/>
+                                                    <xs:element name="vICMS" type="xs:string"/>
+                                                    <xs:element name="vICMSDeson" type="xs:string"/>
+                                                    <xs:element name="vFCP" type="xs:string"/>
+                                                    <xs:element name="vBCST" type="xs:string"/>
+                                                    <xs:element name="vST" type="xs:string"/>
+                                                    <xs:element name="vFCPST" type="xs:string"/>
+                                                    <xs:element name="vFCPSTRet" type="xs:string"/>
+                                                    <xs:element name="vProd" type="xs:string"/>
+                                                    <xs:element name="vFrete" type="xs:string"/>
+                                                    <xs:element name="vSeg" type="xs:string"/>
+                                                    <xs:element name="vDesc" type="xs:string"/>
+                                                    <xs:element name="vII" type="xs:string"/>
+                                                    <xs:element name="vIPI" type="xs:string"/>
+                                                    <xs:element name="vIPIDevol" type="xs:string"/>
+                                                    <xs:element name="vPIS" type="xs:string"/>
+                                                    <xs:element name="vCOFINS" type="xs:string"/>
+                                                    <xs:element name="vOutro" type="xs:string"/>
+                                                    <xs:element name="vNF" type="xs:string"/>
+                                                    <xs:element name="vTotTrib" minOccurs="0" type="xs:string"/>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+
+                            <!-- Transporte -->
+                            <xs:element name="transp">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="modFrete" type="xs:string"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+
+                            <!-- Pagamento -->
+                            <xs:element name="pag">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="detPag" maxOccurs="100">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="tPag" type="xs:string"/>
+                                                    <xs:element name="vPag" type="xs:string"/>
+                                                    <xs:element name="xPag" minOccurs="0" type="xs:string"/>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="vTroco" minOccurs="0" type="xs:string"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+
+                            <!-- Informações Adicionais -->
+                            <xs:element name="infAdic" minOccurs="0">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="infCpl" type="xs:string"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                        <xs:attribute name="Id" use="required" type="xs:string"/>
+                        <xs:attribute name="versao" use="required" type="xs:string"/>
+                    </xs:complexType>
+                </xs:element>
+
+                <!-- Suplementar NFC-e -->
+                <xs:element name="infNFeSupl" minOccurs="0">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="qrCode" type="xs:string"/>
+                            <xs:element name="urlChave" type="xs:string"/>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>
