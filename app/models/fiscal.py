@@ -61,6 +61,12 @@ class DocumentoFiscal(Base):
     cstat = Column(Integer, nullable=True)
     xmotivo = Column(Text, nullable=True)
     protocolo_autorizacao = Column(String(50), nullable=True)
+
+    # Notificações WhatsApp (Evolution API)
+    whatsapp_telefone = Column(String(20), nullable=True)
+    whatsapp_notificado_at = Column(DateTime(timezone=True), nullable=True)
+    whatsapp_message_id = Column(String(100), nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

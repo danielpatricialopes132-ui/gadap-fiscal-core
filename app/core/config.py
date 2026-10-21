@@ -97,6 +97,24 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = Field(default=None, description="String de conexão PostgreSQL do Supabase")
     SUPABASE_STORAGE_BUCKET: str = Field(default="documentos-fiscais", description="Nome do bucket para XMLs e DANFEs")
 
+    # Evolution API (WhatsApp Notifications)
+    EVOLUTION_API_URL: str = Field(
+        default="https://whatsapp-ecostone.onrender.com",
+        description="URL base da Evolution API",
+    )
+    EVOLUTION_API_KEY: str = Field(
+        default="Gabriel2006!",
+        description="Chave de API (apikey) da Evolution API",
+    )
+    EVOLUTION_INSTANCE_NAME: str = Field(
+        default="ecostone",
+        description="Nome da instância na Evolution API",
+    )
+    WHATSAPP_NOTIFICATIONS_ENABLED: bool = Field(
+        default=True,
+        description="Ativa ou desativa o disparo automático de WhatsApp",
+    )
+
     # Endpoints de WebServices
     webservices: WebServiceEndpoints = Field(default_factory=WebServiceEndpoints)
 

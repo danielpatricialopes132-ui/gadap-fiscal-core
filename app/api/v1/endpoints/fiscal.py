@@ -154,13 +154,19 @@ def get_status_sefaz(
         )
 
 
+from fastapi import BackgroundTasks
+
+
 @router.post(
     "/emitir",
     response_model=EmissaoFiscalResponse,
     summary="Emissão Canônica de Documento Fiscal (NF-e, NFC-e e NFS-e)",
     description="Orquestra o ciclo completo: cálculo tributário (Simples Nacional), geração e validação de XML, assinatura XML-DSig, autorização e geração de DANFE em PDF.",
 )
-def emitir_documento_fiscal(payload: DocumentoFiscalInput) -> EmissaoFiscalResponse:
+def emitir_documento_fiscal(
+    payload: DocumentoFiscalInput,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> EmissaoFiscalResponse:
     tipo = payload.tipo_documento
 
     # -------------------------------------------------------------------------
@@ -290,6 +296,38 @@ def emitir_documento_fiscal(payload: DocumentoFiscalInput) -> EmissaoFiscalRespo
         )
     except Exception:
         pass
+
+    # 6. Disparo Assíncrono de WhatsApp via Evolution API (Fase 9)
+    tel_whatsapp = (
+        payload.destinatario.telefone_whatsapp
+        if payload.destinatario and payload.destinatario.telefone_whatsapp
+        else None
+    )
+    if tel_whatsapp and settings.WHATSAPP_NOTIFICATIONS_ENABLED:
+        try:
+            from app.services.notifications.evolution_whatsapp import EvolutionWhatsAppClient
+            from app.services.storage.supabase_storage import SupabaseStorageService
+
+            def _disparar_whatsapp():
+                supabase_storage = SupabaseStorageService()
+                url_pdf = supabase_storage.obter_url_download_temporaria(f"pdf/{chave_acesso}.pdf", expires_in=7200)
+                client = EvolutionWhatsAppClient()
+                dest_nome = payload.destinatario.razao_social if payload.destinatario else "Cliente"
+                client.enviar_notificacao_nota_autorizada(
+                    chave_acesso=chave_acesso,
+                    numero_nota=payload.numero,
+                    destinatario_nome=dest_nome,
+                    telefone=tel_whatsapp,
+                    pdf_url=url_pdf,
+                    razao_social_emitente=payload.emitente.razao_social,
+                )
+
+            if background_tasks:
+                background_tasks.add_task(_disparar_whatsapp)
+            else:
+                _disparar_whatsapp()
+        except Exception:
+            pass
 
     return EmissaoFiscalResponse(
         sucesso=True,

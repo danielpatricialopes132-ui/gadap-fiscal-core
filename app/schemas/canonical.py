@@ -87,6 +87,11 @@ class DestinatarioInput(BaseModel):
         description="1 = Contribuinte ICMS, 2 = Contribuinte Isento, 9 = Não Contribuinte",
     )
     email: Optional[str] = Field(None, max_length=60, description="E-mail para envio do XML/DANFE")
+    telefone_whatsapp: Optional[str] = Field(
+        None,
+        max_length=20,
+        description="Telefone com DDD para envio automático de WhatsApp via Evolution API",
+    )
     endereco: Optional[EnderecoInput] = Field(
         None,
         description="Endereço do destinatário (obrigatório para NF-e mod 55)",

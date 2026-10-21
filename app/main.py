@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.api.routes import router as dfe_router
 from app.api.v1.endpoints.fiscal import router as fiscal_v1_router
 from app.api.v1.endpoints.fiscal_records import router as fiscal_records_router
+from app.api.v1.endpoints.notifications import router as notifications_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -14,10 +15,11 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# Inclusão dos endpoints operacionais DF-e, v1 e records
+# Inclusão dos endpoints operacionais DF-e, v1, records e notificações
 app.include_router(dfe_router)
 app.include_router(fiscal_v1_router)
 app.include_router(fiscal_records_router)
+app.include_router(notifications_router)
 
 
 @app.get("/")

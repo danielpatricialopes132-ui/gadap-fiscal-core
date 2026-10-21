@@ -23,6 +23,9 @@ from app.services.storage.supabase_storage import SupabaseStorageService
 from app.core.security.certificate import A1CertificateManager
 
 
+from fastapi import BackgroundTasks
+
+
 class EmissionOrchestrator:
     """Orquestrador do fluxo completo de emissão com garantia de idempotência e persistência."""
 
@@ -30,7 +33,11 @@ class EmissionOrchestrator:
         self.db = db
         self.storage = storage or SupabaseStorageService()
 
-    def processar_emissao(self, payload: DocumentoFiscalInput) -> Dict[str, Any]:
+    def processar_emissao(
+        self,
+        payload: DocumentoFiscalInput,
+        background_tasks: Optional[BackgroundTasks] = None,
+    ) -> Dict[str, Any]:
         """Executa a emissão com checagem de idempotência, envio ao fisco e gravação no Storage."""
         idemp_key = payload.idempotency_key or f"IDEMP-{payload.emitente.cnpj}-{payload.serie}-{payload.numero}"
         tipo_str = payload.tipo_documento.value
@@ -184,6 +191,9 @@ class EmissionOrchestrator:
             )
             self.db.add(arq_pdf)
 
+        xml_b64 = base64.b64encode(xml_final.encode("utf-8")).decode("utf-8") if xml_final else None
+        danfe_b64 = base64.b64encode(danfe_pdf_bytes).decode("utf-8") if danfe_pdf_bytes else None
+
         doc_registro.status = status_final
         doc_registro.cstat = c_stat
         doc_registro.xmotivo = x_motivo
@@ -191,8 +201,88 @@ class EmissionOrchestrator:
         self.db.commit()
         self.db.refresh(doc_registro)
 
-        xml_b64 = base64.b64encode(xml_final.encode("utf-8")).decode("utf-8")
-        danfe_b64 = base64.b64encode(danfe_pdf_bytes).decode("utf-8") if danfe_pdf_bytes else None
+
+        # ---------------------------------------------------------------------
+        # 6. Disparo Assíncrono de WhatsApp via Evolution API (Fase 9)
+        # ---------------------------------------------------------------------
+        tel_whatsapp = (
+            payload.destinatario.telefone_whatsapp
+            if payload.destinatario and payload.destinatario.telefone_whatsapp
+            else None
+        )
+
+        whatsapp_disparado = False
+        if (
+            status_final == "AUTORIZADA"
+            and tel_whatsapp
+            and settings.WHATSAPP_NOTIFICATIONS_ENABLED
+            and url_pdf
+        ):
+            try:
+                from app.services.notifications.evolution_whatsapp import EvolutionWhatsAppClient
+
+                def _enviar_whatsapp_task(
+                    doc_id: str,
+                    tel: str,
+                    chave: str,
+                    numero: int,
+                    nome_dest: str,
+                    link_pdf: str,
+                    razao_emit: str,
+                ):
+                    from app.db.session import get_engine
+                    from sqlalchemy.orm import sessionmaker
+
+                    wp_client = EvolutionWhatsAppClient()
+                    res_wp = wp_client.enviar_notificacao_nota_autorizada(
+                        chave_acesso=chave,
+                        numero_nota=numero,
+                        destinatario_nome=nome_dest,
+                        telefone=tel,
+                        pdf_url=link_pdf,
+                        razao_social_emitente=razao_emit,
+                    )
+                    # Atualiza registro no banco se sucesso
+                    if res_wp.get("sucesso"):
+                        try:
+                            eng = get_engine()
+                            SessionMaker = sessionmaker(bind=eng)
+                            with SessionMaker() as sess:
+                                d = sess.query(DocumentoFiscal).filter(DocumentoFiscal.id == doc_id).first()
+                                if d:
+                                    d.whatsapp_telefone = tel
+                                    d.whatsapp_notificado_at = datetime.now(timezone.utc)
+                                    d.whatsapp_message_id = str(res_wp.get("message_id") or "")
+                                    sess.commit()
+                        except Exception:
+                            pass
+
+                if background_tasks:
+                    background_tasks.add_task(
+                        _enviar_whatsapp_task,
+                        doc_id=doc_registro.id,
+                        tel=tel_whatsapp,
+                        chave=chave_acesso,
+                        numero=payload.numero,
+                        nome_dest=dest_nome or "Cliente",
+                        link_pdf=url_pdf,
+                        razao_emit=payload.emitente.razao_social,
+                    )
+                    whatsapp_disparado = True
+                else:
+                    # Executa diretamente se não houver background_tasks injetado
+                    _enviar_whatsapp_task(
+                        doc_id=doc_registro.id,
+                        tel=tel_whatsapp,
+                        chave=chave_acesso,
+                        numero=payload.numero,
+                        nome_dest=dest_nome or "Cliente",
+                        link_pdf=url_pdf,
+                        razao_emit=payload.emitente.razao_social,
+                    )
+                    whatsapp_disparado = True
+            except Exception:
+                pass
 
         return {
             "idempotente": False,
@@ -208,5 +298,6 @@ class EmissionOrchestrator:
             "danfe_pdf_b64": danfe_b64,
             "storage_xml_url": url_xml,
             "storage_pdf_url": url_pdf,
+            "whatsapp_disparado": whatsapp_disparado,
             "ambiente": settings.DFE_ENVIRONMENT.value,
         }
