@@ -284,6 +284,48 @@ class EmissionOrchestrator:
             except Exception:
                 pass
 
+        # ---------------------------------------------------------------------
+        # 7. Disparo de Webhook Transacional para o ERP (Fase 12)
+        # ---------------------------------------------------------------------
+        try:
+            from app.services.webhooks.dispatcher import WebhookDispatcher
+            evento_fiscal = "fiscal.nfe.autorizada" if status_final == "AUTORIZADA" else "fiscal.nfe.rejeitada"
+            webhook_payload = {
+                "tipo_documento": tipo_str,
+                "chave_acesso": chave_acesso,
+                "numero": payload.numero,
+                "serie": payload.serie,
+                "c_stat": str(c_stat),
+                "x_motivo": x_motivo,
+                "protocolo": protocolo,
+                "status": status_final,
+                "destinatario": {
+                    "documento": payload.destinatario.cpf_cnpj if payload.destinatario else None,
+                    "nome": dest_nome,
+                },
+                "storage_xml_url": url_xml,
+                "storage_pdf_url": url_pdf,
+            }
+
+            def _disparar_webhook_task(emp_id: str, ev: str, data: dict):
+                from app.db.session import get_engine
+                from sqlalchemy.orm import sessionmaker
+                try:
+                    eng = get_engine()
+                    SessionMaker = sessionmaker(bind=eng)
+                    with SessionMaker() as sess:
+                        WebhookDispatcher.disparar_evento(sess, emp_id, ev, data)
+                except Exception:
+                    pass
+
+            if background_tasks:
+                background_tasks.add_task(_disparar_webhook_task, emp_id=empresa.id, ev=evento_fiscal, data=webhook_payload)
+            else:
+                WebhookDispatcher.disparar_evento(self.db, empresa.id, evento_fiscal, webhook_payload)
+        except Exception:
+            pass
+
+
         return {
             "idempotente": False,
             "sucesso": status_final == "AUTORIZADA",
